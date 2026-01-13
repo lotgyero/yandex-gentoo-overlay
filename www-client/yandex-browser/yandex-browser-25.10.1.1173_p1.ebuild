@@ -25,7 +25,7 @@ case ${PN} in
 		MY_PN="${PN}"
 		HOMEPAGE="https://browser.yandex.ru/beta/"
 		DESKTOP_FILE_NAME="${PN}"
-		FFMPEG_PV="140"
+		FFMPEG_PV="143"
 		;;
 	yandex-browser-corporate)
 		MY_PN="${PN}"

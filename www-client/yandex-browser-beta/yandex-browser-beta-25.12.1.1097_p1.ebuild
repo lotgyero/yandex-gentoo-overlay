@@ -1,4 +1,4 @@
-# Copyright 1999-2025 Gentoo Authors
+# Copyright 1999-2026 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
 EAPI=8
@@ -25,7 +25,7 @@ case ${PN} in
 		MY_PN="${PN}"
 		HOMEPAGE="https://browser.yandex.ru/beta/"
 		DESKTOP_FILE_NAME="${PN}"
-		FFMPEG_PV="140"
+		FFMPEG_PV="143"
 		;;
 	yandex-browser-corporate)
 		MY_PN="${PN}"

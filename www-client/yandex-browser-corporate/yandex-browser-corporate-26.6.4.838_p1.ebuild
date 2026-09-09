@@ -147,11 +147,6 @@ src_prepare() {
 
 	default
 
-	# TODO: take a look, if New* and TargetEnvironment replaces still needed in modern versions of non-corporate build
-		# -e 's|\[(NewWindow)|\[X-\1|g' \
-		# -e 's|\[(NewIncognito)|\[X-\1|g' \
-		# -e 's|^TargetEnvironment|X-&|g' \
-
 	if [[ "${PN}" == *"-stable" ]]; then
 		sed -r \
 			-e 's|-stable||g' \

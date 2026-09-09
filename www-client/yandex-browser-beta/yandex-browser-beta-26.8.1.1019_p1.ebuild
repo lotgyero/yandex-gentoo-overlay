@@ -36,17 +36,23 @@ case ${PN} in
 		;;
 esac
 YANDEX_HOME="opt/${DESKTOP_FILE_NAME/-//}"
+# Collisions between beta-stable-corporate
+YANDEX_COLLISIONS=(
+	usr/share/mime/packages/yandex-browser-yprotect.xml
+	usr/share/icons/hicolor/scalable/mimetypes/application-x-yprotect.svg
+)
 
 DESCRIPTION="The web browser from Yandex"
 LICENSE="Yandex-EULA"
 SLOT="0"
-IUSE="+ffmpeg-codecs qt5 qt6"
+IUSE="gost +ffmpeg-codecs qt6"
 SRC_URI="
 	amd64? ( https://repo.yandex.ru/yandex-browser/deb/pool/main/y/${MY_PN}/${MY_PN}_${MY_PV}_amd64.deb -> ${P}.deb )
 "
 KEYWORDS="~amd64"
 
 RDEPEND="
+	gost? ( app-crypt/cprocsp )
 	dev-libs/expat
 	dev-libs/glib:2
 	dev-libs/nspr
@@ -74,14 +80,7 @@ RDEPEND="
 	x11-misc/xdg-utils
 	ffmpeg-codecs? ( media-video/ffmpeg-chromium:${FFMPEG_PV} )
 	sys-libs/libudev-compat
-	qt5? (
-		dev-qt/qtcore:5
-		dev-qt/qtgui:5[X]
-		dev-qt/qtwidgets:5
-	)
-	qt6? (
-		dev-qt/qtbase:6[gui,widgets]
-	)
+	dev-qt/qtbase:6[gui,widgets]
 	app-accessibility/at-spi2-core
 	${BLOCK}
 "
@@ -90,7 +89,7 @@ BDEPEND="
 "
 
 QA_PREBUILT="*"
-QA_DESKTOP_FILE="usr/share/applications/ru.yandex.desktop.browser.*\\.desktop usr/share/applications/yandex-browser.*\\.desktop"
+QA_DESKTOP_FILE="usr/share/applications/ru.yandex.desktop.browser*\\.desktop usr/share/applications/yandex-browser.*\\.desktop"
 # TODO: 👆 check ru.yandex .desktop name on beta
 S=${WORKDIR}
 
@@ -125,9 +124,7 @@ src_prepare() {
 		chromium_remove_language_paks
 	popd > /dev/null || die
 
-	if ! use qt5; then
-		rm "${YANDEX_HOME}/libqt5_shim.so" || die
-	fi
+	rm "${YANDEX_HOME}/libqt5_shim.so" || die
 	if ! use qt6; then
 		rm "${YANDEX_HOME}/libqt6_shim.so" || die
 	fi
@@ -150,12 +147,20 @@ src_prepare() {
 
 	default
 
-	sed -r \
-		-e 's|\[(NewWindow)|\[X-\1|g' \
-		-e 's|\[(NewIncognito)|\[X-\1|g' \
-		-e 's|^TargetEnvironment|X-&|g' \
-		-e 's|-stable||g' \
-		-i usr/share/applications/${DESKTOP_FILE_NAME}.desktop || die
+	# TODO: take a look, if New* and TargetEnvironment replaces still needed in modern versions of non-corporate build
+		# -e 's|\[(NewWindow)|\[X-\1|g' \
+		# -e 's|\[(NewIncognito)|\[X-\1|g' \
+		# -e 's|^TargetEnvironment|X-&|g' \
+
+	if [[ "${PN}" == *"-stable" ]]; then
+		sed -r \
+			-e 's|-stable||g' \
+			-i usr/share/applications/${DESKTOP_FILE_NAME}.desktop || die
+	fi
+
+	for f in ${YANDEX_COLLISIONS[@]}; do
+		mv ${f} "${S}/${YANDEX_HOME}/${f//\//__}"
+	done
 
 	patchelf --remove-rpath "${S}/${YANDEX_HOME}/yandex_browser-sandbox" || die "Failed to fix library rpath (sandbox)"
 	patchelf --remove-rpath "${S}/${YANDEX_HOME}/yandex_browser" || die "Failed to fix library rpath (yandex_browser)"
@@ -167,7 +172,10 @@ src_install() {
 	dodir /usr/$(get_libdir)/${MY_PN}/lib
 	mv "${D}"/usr/share/appdata "${D}"/usr/share/metainfo || die
 
-	make_wrapper "${PN}" "./${DESKTOP_FILE_NAME}" "/${YANDEX_HOME}" "/usr/$(get_libdir)/${MY_PN}/lib" \
+	local gost
+	use gost && gost="/opt/cprocsp/lib/amd64"
+
+	make_wrapper "${PN}" "./${DESKTOP_FILE_NAME}" "/${YANDEX_HOME}" "${gost}${gost+:}/usr/$(get_libdir)/${MY_PN}/lib" \
 		|| die "Failed to make a wrapper"
 
 	for icon in "${D}/${YANDEX_HOME}/product_logo_"*.png; do
@@ -182,8 +190,30 @@ src_install() {
 	fowners root:root "/${YANDEX_HOME}/yandex_browser-sandbox"
 	fperms 4711 "/${YANDEX_HOME}/yandex_browser-sandbox"
 	pax-mark m "${ED}${YANDEX_HOME}/yandex_browser-sandbox"
+}
 
-	# TODO: think about a way to fix corporate-vs-beta-vs-stable collision of:
-	#  /usr/share/mime/packages/yandex-browser-yprotect.xml
-	#  /usr/share/icons/hicolor/scalable/mimetypes/application-x-yprotect.svg
+pkg_postinst() {
+	for f in ${YANDEX_COLLISIONS[@]}; do
+		if test ! -f ${f} -a ! -L ${f}; then
+			ln -s "${EPREFIX}/${YANDEX_HOME}/${f//\//__}" "${EPREFIX}/${f}"
+		fi
+	done
+}
+
+pkg_postrm() {
+	function yowser_any_installed() {
+		has_version www-client/yandex-browser || \
+		has_version www-client/yandex-browser-beta || \
+		has_version www-client/yandex-browser-corporate
+	}
+
+	for f in ${YANDEX_COLLISIONS[@]}; do
+		if \
+			! yowser_any_installed &>dev/null && \
+			test -f ${f} -a -L ${f} && \
+			[[ $(readlink ${f}) == ${EPREFIX}/${YANDEX_HOME}/${f//\//__} ]];
+		then
+			rm "${EPREFIX}/${f}"
+		fi
+	done
 }
